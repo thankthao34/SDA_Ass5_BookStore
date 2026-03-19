@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="grid two-col">
+    <article class="panel panel-form">
+        <h2>Create Customer</h2>
+        <p class="muted">This form calls customer-service and triggers auto cart creation in cart-service.</p>
+        <form method="post" class="stacked-form">
+            {% csrf_token %}
+            <label>Name
+                <input name="name" type="text" placeholder="Jane Doe" required />
+            </label>
+            <label>Email
+                <input name="email" type="email" placeholder="jane@example.com" required />
+            </label>
+            <label>Phone
+                <input name="phone" type="text" placeholder="0901234567" />
+            </label>
+            <label>Address
+                <input name="address" type="text" placeholder="Ho Chi Minh City" />
+            </label>
+            <button type="submit">Create Customer</button>
+        </form>
+    </article>
+
+    <article class="panel panel-list">
+        <h2>Customers</h2>
+        <p class="muted">Live data loaded from customer-service.</p>
+        <form method="get" class="search-row">
+            <input name="q" type="text" value="{{ search_query }}" placeholder="Search by ID, name, email, phone, address..." />
+            <button type="submit">Search</button>
+            {% if search_query %}
+            <a class="table-link" href="{% url 'customers' %}">Clear</a>
+            {% endif %}
+        </form>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for customer in customers %}
+                    <tr>
+                        <td>{{ customer.id }}</td>
+                        <td>{{ customer.name }}</td>
+                        <td>{{ customer.email }}</td>
+                        <td>{{ customer.phone|default:'-' }}</td>
+                        <td>
+                            <a class="table-link" href="{% url 'cart' customer.id %}">Cart</a>
+                            |
+                            <a class="table-link" href="{% url 'orders' customer.id %}">Orders</a>
+                            |
+                            <a class="table-link" href="{% url 'recommendations' customer.id %}">Recs</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5">No customers available.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+</section>
+{% endblock %}

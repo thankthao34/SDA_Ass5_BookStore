@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="grid two-col">
+    <article class="panel panel-form">
+        <h2>Customer Cart #{{ customer_id }}</h2>
+        {% if can_edit_cart %}
+        <p class="muted">Add books directly from the Books page, then return here to checkout.</p>
+        <a class="button-like" href="/books/">Go To Books</a>
+        {% else %}
+        <p class="muted">Read-only view. Only customer accounts can modify cart and checkout.</p>
+        {% endif %}
+
+        <h3 class="subheading">Quick Book IDs</h3>
+        <ul class="mini-list">
+            {% for book in books %}
+            <li>#{{ book.id }} - {{ book.title }}</li>
+            {% empty %}
+            <li>Book list unavailable.</li>
+            {% endfor %}
+        </ul>
+    </article>
+
+    <article class="panel panel-list">
+        <h2>Cart Items</h2>
+        <p class="muted">Loaded from cart-service.</p>
+        <div class="summary-row">
+            <span>Cart ID: <strong>{{ cart_id|default:'-' }}</strong></span>
+            <span>Total: <strong>{{ cart_total }}</strong></span>
+        </div>
+        <div class="search-row">
+            <input id="cartSearchInput" type="text" placeholder="Search cart by book ID, quantity, price, title..." />
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Cart ID</th>
+                        <th>Book ID</th>
+                        <th>Quantity</th>
+                        <th>Price Snapshot</th>
+                        {% if can_edit_cart %}
+                        <th>Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>{{ item.cart }}</td>
+                        <td>{{ item.book_id }}</td>
+                        <td>
+                            {% if can_edit_cart %}
+                            <form method="post" class="inline-cart-form">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="update_item" />
+                                <input type="hidden" name="item_id" value="{{ item.id }}" />
+                                <input name="quantity" type="number" min="1" step="1" value="{{ item.quantity }}" required />
+                                <button type="submit">Update</button>
+                            </form>
+                            {% else %}
+                            {{ item.quantity }}
+                            {% endif %}
+                        </td>
+                        <td>{{ item.price_snapshot }}</td>
+                        {% if can_edit_cart %}
+                        <td>
+                            <form method="post" class="inline-cart-form">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="remove_item" />
+                                <input type="hidden" name="item_id" value="{{ item.id }}" />
+                                <button type="submit" class="danger-button">Remove</button>
+                            </form>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5">No items in cart.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if can_edit_cart %}
+        <form method="post" class="stacked-form checkout-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="checkout" />
+            <label>Payment Method
+                <select name="pay_method">
+                    <option value="cod">Cash On Delivery</option>
+                    <option value="bank">Bank Transfer</option>
+                    <option value="card">Card</option>
+                </select>
+            </label>
+            <label>Shipping Address
+                <input name="ship_address" type="text" placeholder="Street, district, city" required />
+            </label>
+            <button type="submit" {% if not items %}disabled{% endif %}>Checkout This Cart</button>
+        </form>
+        {% endif %}
+    </article>
+</section>
+
+<script>
+    (function () {
+        var input = document.getElementById("cartSearchInput");
+        if (!input) {
+            return;
+        }
+
+        var rows = Array.prototype.slice.call(document.querySelectorAll("tbody tr"));
+        var quickItems = Array.prototype.slice.call(document.querySelectorAll(".mini-list li"));
+
+        input.addEventListener("input", function () {
+            var q = (input.value || "").toLowerCase().trim();
+
+            rows.forEach(function (row) {
+                var text = (row.innerText || "").toLowerCase();
+                row.style.display = !q || text.indexOf(q) >= 0 ? "" : "none";
+            });
+
+            quickItems.forEach(function (item) {
+                var text = (item.innerText || "").toLowerCase();
+                item.style.display = !q || text.indexOf(q) >= 0 ? "" : "none";
+            });
+        });
+    })();
+</script>
+{% endblock %}

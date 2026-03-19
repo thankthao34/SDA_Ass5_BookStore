@@ -1,0 +1,1375 @@
+================================================================================
+  ASSIGNMENT 05 — KẾ HOẠCH XÂY DỰNG BOOKSTORE MICROSERVICE SYSTEM
+  Software Architecture & Design | Django REST Framework + Docker Compose
+================================================================================
+
+MỤC LỤC
+--------
+1.  Tổng quan dự án
+2.  Cấu trúc thư mục
+3.  Dockerfile & requirements.txt chuẩn
+4.  Đặc tả chi tiết từng service (12 services)
+5.  Luồng giao tiếp inter-service (5 luồng)
+6.  Docker Compose đầy đủ
+7.  Lịch trình thực hiện (12 ngày)
+8.  Checklist deliverables
+9.  Lưu ý quan trọng
+
+
+================================================================================
+1. TỔNG QUAN DỰ ÁN
+================================================================================
+
+Mục tiêu: Phân rã BookStore nguyên khối thành 12 microservice độc lập.
+Công nghệ: Django REST Framework, SQLite (mỗi service), Docker Compose.
+
+DANH SÁCH 12 SERVICES
+----------------------
+  Service                   Port   Domain / Vai trò
+  ──────────────────────────────────────────────────────────────────────
+  api-gateway               8000   Điểm vào duy nhất, proxy + render HTML
+  staff-service             8001   Quản lý nhân viên
+  customer-service          8002   Quản lý khách hàng, auto-tạo giỏ hàng
+  book-service              8003   Quản lý sách, tồn kho (service trung tâm)
+  catalog-service           8004   Danh mục, thể loại, tag
+  cart-service              8005   Giỏ hàng, cart items
+  manager-service           8006   Quản lý cấp cao
+  order-service             8007   Đặt hàng, điều phối pay + ship
+  pay-service               8008   Thanh toán đơn hàng
+  ship-service              8009   Giao hàng, tracking
+  comment-rate-service      8010   Đánh giá, bình luận sách
+  recommender-ai-service    8011   Gợi ý sách theo lịch sử mua
+
+NGUYÊN TẮC THIẾT KẾ
+---------------------
+  1. Single Responsibility  — mỗi service sở hữu đúng một business capability
+  2. Database per Service   — không chia sẻ database giữa các service
+  3. API-First Design       — định nghĩa REST contract trước khi implement
+  4. Loose Coupling         — service chỉ giao tiếp qua REST API
+  5. Stateless Services     — không lưu session, dùng customer_id làm định danh
+  6. Fault Isolation        — lỗi một service không crash service khác
+
+
+================================================================================
+2. CẤU TRÚC THƯ MỤC DỰ ÁN
+================================================================================
+
+bookstore-microservice/
+├── api-gateway/
+├── staff-service/
+├── customer-service/
+├── book-service/
+├── catalog-service/
+├── cart-service/
+├── manager-service/
+├── order-service/
+├── pay-service/
+├── ship-service/
+├── comment-rate-service/
+├── recommender-ai-service/
+└── docker-compose.yml
+
+Cấu trúc nội bộ mỗi service (chuẩn):
+--------------------------------------
+  <service-name>/
+  ├── Dockerfile
+  ├── requirements.txt
+  ├── manage.py
+  ├── <project_name>/
+  │   ├── settings.py
+  │   ├── urls.py
+  │   └── wsgi.py
+  └── app/
+      ├── models.py
+      ├── serializers.py
+      ├── views.py
+      └── urls.py
+
+
+================================================================================
+3. DOCKERFILE & REQUIREMENTS.TXT CHUẨN (DÙNG CHUNG MỌI SERVICE)
+================================================================================
+
+---- Dockerfile ----
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+RUN python manage.py migrate --run-syncdb
+EXPOSE 8000
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+
+---- requirements.txt ----
+django>=4.2
+djangorestframework>=3.14
+requests>=2.31
+
+---- settings.py tối thiểu ----
+INSTALLED_APPS = [
+    'rest_framework',
+    'app',
+]
+
+ALLOWED_HOSTS = ['*']
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
+
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
+    'DEFAULT_PERMISSION_CLASSES': [],
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
+}
+
+
+================================================================================
+4. ĐẶC TẢ CHI TIẾT TỪNG SERVICE
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+4.1  staff-service — Port 8001
+     Domain: Identity — Staff Management
+────────────────────────────────────────────────────────────────────────────────
+
+Models:
+  Staff(id, name, email, role, department, created_at)
+  role: choices = ['admin', 'staff', 'librarian']
+
+Endpoints:
+  GET    /staffs/          Danh sách tất cả nhân viên
+  POST   /staffs/          Tạo nhân viên mới
+  GET    /staffs/<id>/     Chi tiết nhân viên
+  PUT    /staffs/<id>/     Cập nhật thông tin
+  DELETE /staffs/<id>/     Xóa nhân viên
+
+Gọi tới service khác: (không có)
+
+---- models.py ----
+from django.db import models
+
+class Staff(models.Model):
+    ROLE_CHOICES = [('admin','Admin'),('staff','Staff'),('librarian','Librarian')]
+    name       = models.CharField(max_length=255)
+    email      = models.EmailField(unique=True)
+    role       = models.CharField(max_length=50, choices=ROLE_CHOICES, default='staff')
+    department = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+---- serializers.py ----
+from rest_framework import serializers
+from .models import Staff
+
+class StaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Staff
+        fields = '__all__'
+
+---- views.py ----
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Staff
+from .serializers import StaffSerializer
+
+class StaffListCreate(APIView):
+    def get(self, request):
+        return Response(StaffSerializer(Staff.objects.all(), many=True).data)
+
+    def post(self, request):
+        s = StaffSerializer(data=request.data)
+        if s.is_valid():
+            s.save()
+            return Response(s.data, status=201)
+        return Response(s.errors, status=400)
+
+class StaffDetail(APIView):
+    def get_object(self, pk):
+        try: return Staff.objects.get(pk=pk)
+        except Staff.DoesNotExist: return None
+
+    def get(self, request, pk):
+        obj = self.get_object(pk)
+        if not obj: return Response({'error': 'Not found'}, status=404)
+        return Response(StaffSerializer(obj).data)
+
+    def put(self, request, pk):
+        obj = self.get_object(pk)
+        if not obj: return Response({'error': 'Not found'}, status=404)
+        s = StaffSerializer(obj, data=request.data)
+        if s.is_valid():
+            s.save()
+            return Response(s.data)
+        return Response(s.errors, status=400)
+
+    def delete(self, request, pk):
+        obj = self.get_object(pk)
+        if not obj: return Response({'error': 'Not found'}, status=404)
+        obj.delete()
+        return Response(status=204)
+
+---- urls.py ----
+from django.urls import path
+from .views import StaffListCreate, StaffDetail
+
+urlpatterns = [
+    path('staffs/', StaffListCreate.as_view()),
+    path('staffs/<int:pk>/', StaffDetail.as_view()),
+]
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.2  customer-service — Port 8002
+     Domain: Identity — Customer Management
+     !! Khi tạo customer mới, tự động gọi cart-service tạo giỏ hàng !!
+────────────────────────────────────────────────────────────────────────────────
+
+Models:
+  Customer(id, name, email, phone, address, created_at)
+
+Endpoints:
+  GET    /customers/        Danh sách khách hàng
+  POST   /customers/        Đăng ký + tự động tạo cart
+  GET    /customers/<id>/   Chi tiết khách hàng
+  PUT    /customers/<id>/   Cập nhật thông tin
+  DELETE /customers/<id>/   Xóa khách hàng
+
+Gọi tới service khác:
+  → cart-service: POST /carts/  (tự động khi tạo customer)
+
+---- models.py ----
+from django.db import models
+
+class Customer(models.Model):
+    name       = models.CharField(max_length=255)
+    email      = models.EmailField(unique=True)
+    phone      = models.CharField(max_length=20, blank=True)
+    address    = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+---- views.py ----
+import os, requests
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .models import Customer
+from .serializers import CustomerSerializer
+
+CART_SERVICE_URL = os.environ.get('CART_SERVICE_URL', 'http://cart-service:8000')
+
+class CustomerListCreate(APIView):
+    def get(self, request):
+        return Response(CustomerSerializer(Customer.objects.all(), many=True).data)
+
+    def post(self, request):
+        s = CustomerSerializer(data=request.data)
+        if s.is_valid():
+            customer = s.save()
+            # Auto-create cart
+            try:
+                requests.post(
+                    f'{CART_SERVICE_URL}/carts/',
+                    json={'customer_id': customer.id},
+                    timeout=5
+                )
+            except requests.RequestException as e:
+                print(f'Warning: could not create cart: {e}')
+            return Response(s.data, status=201)
+        return Response(s.errors, status=400)
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.3  book-service — Port 8003
+     Domain: Catalog — Book Management
+     !! Service trung tâm — được cart, order, comment, recommender gọi !!
+────────────────────────────────────────────────────────────────────────────────
+
+Models:
+  Book(id, title, author, price, stock, description, cover_url,
+       catalog_id, created_at, updated_at)
+
+Endpoints:
+  GET    /books/              Danh sách sách (filter: author, catalog_id)
+  POST   /books/              Thêm sách mới (staff dùng)
+  GET    /books/<id>/         Chi tiết sách
+  PUT    /books/<id>/         Cập nhật thông tin sách
+  DELETE /books/<id>/         Xóa sách
+  PUT    /books/<id>/stock/   Cập nhật tồn kho (order-service gọi)
+
+Gọi tới service khác: (không có — đây là leaf service)
+
+---- models.py ----
+from django.db import models
+
+class Book(models.Model):
+    title       = models.CharField(max_length=255)
+    author      = models.CharField(max_length=255)
+    price       = models.DecimalField(max_digits=10, decimal_places=2)
+    stock       = models.IntegerField(default=0)
+    description = models.TextField(blank=True)
+    cover_url   = models.URLField(blank=True)
+    catalog_id  = models.IntegerField(null=True, blank=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+---- views.py (thêm endpoint stock) ----
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .models import Book
+from .serializers import BookSerializer
+
+class BookListCreate(APIView):
+    def get(self, request):
+        books = Book.objects.all()
+        catalog_id = request.query_params.get('catalog_id')
+        if catalog_id:
+            books = books.filter(catalog_id=catalog_id)
+        return Response(BookSerializer(books, many=True).data)
+
+    def post(self, request):
+        s = BookSerializer(data=request.data)
+        if s.is_valid():
+            s.save()
+            return Response(s.data, status=201)
+        return Response(s.errors, status=400)
+
+class BookDetail(APIView):
+    def get(self, request, pk):
+        try: book = Book.objects.get(pk=pk)
+        except Book.DoesNotExist: return Response({'error': 'Not found'}, status=404)
+        return Response(BookSerializer(book).data)
+
+    def put(self, request, pk):
+        try: book = Book.objects.get(pk=pk)
+        except Book.DoesNotExist: return Response({'error': 'Not found'}, status=404)
+        s = BookSerializer(book, data=request.data)
+        if s.is_valid():
+            s.save()
+            return Response(s.data)
+        return Response(s.errors, status=400)
+
+    def delete(self, request, pk):
+        try: book = Book.objects.get(pk=pk)
+        except Book.DoesNotExist: return Response({'error': 'Not found'}, status=404)
+        book.delete()
+        return Response(status=204)
+
+class BookUpdateStock(APIView):
+    def put(self, request, pk):
+        try: book = Book.objects.get(pk=pk)
+        except Book.DoesNotExist: return Response({'error': 'Not found'}, status=404)
+        decrease = request.data.get('decrease', 0)
+        increase = request.data.get('increase', 0)
+        book.stock = book.stock - decrease + increase
+        if book.stock < 0:
+            return Response({'error': 'Stock cannot be negative'}, status=400)
+        book.save()
+        return Response({'id': book.id, 'stock': book.stock})
+
+---- urls.py ----
+from django.urls import path
+from .views import BookListCreate, BookDetail, BookUpdateStock
+
+urlpatterns = [
+    path('books/', BookListCreate.as_view()),
+    path('books/<int:pk>/', BookDetail.as_view()),
+    path('books/<int:pk>/stock/', BookUpdateStock.as_view()),
+]
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.4  catalog-service — Port 8004
+     Domain: Catalog — Category & Tag Management
+────────────────────────────────────────────────────────────────────────────────
+
+Models:
+  Category(id, name, description, parent_id)
+  Tag(id, name)
+
+Endpoints:
+  GET    /categories/           Danh sách danh mục
+  POST   /categories/           Tạo danh mục mới
+  GET    /categories/<id>/      Chi tiết danh mục
+  PUT    /categories/<id>/      Cập nhật danh mục
+  GET    /categories/<id>/books/ Sách theo danh mục
+  GET    /tags/                 Danh sách tag
+  POST   /tags/                 Tạo tag mới
+
+Gọi tới service khác:
+  → book-service: GET /books/?catalog_id=<id>
+
+---- models.py ----
+from django.db import models
+
+class Category(models.Model):
+    name        = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    parent_id   = models.IntegerField(null=True, blank=True)
+
+class Tag(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.5  cart-service — Port 8005
+     Domain: Ordering — Cart Management
+     !! Kiểm tra sách qua book-service trước khi thêm vào giỏ !!
+────────────────────────────────────────────────────────────────────────────────
+
+Models:
+  Cart(id, customer_id, created_at, updated_at)
+  CartItem(id, cart, book_id, quantity, price_snapshot, added_at)
+  Lưu price_snapshot = giá tại thời điểm thêm vào giỏ
+
+Endpoints:
+  POST   /carts/                Tạo giỏ hàng (customer-service gọi)
+  GET    /carts/<customer_id>/  Xem giỏ hàng của customer
+  POST   /cart-items/           Thêm sách vào giỏ
+  PUT    /cart-items/<id>/      Cập nhật số lượng
+  DELETE /cart-items/<id>/      Xóa item khỏi giỏ
+  DELETE /carts/<id>/items/     Xóa toàn bộ giỏ (sau khi đặt hàng)
+
+Gọi tới service khác:
+  → book-service: GET /books/<id>/  (kiểm tra tồn tại + lấy giá + kiểm tra stock)
+
+---- models.py ----
+from django.db import models
+
+class Cart(models.Model):
+    customer_id = models.IntegerField(unique=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+class CartItem(models.Model):
+    cart           = models.ForeignKey(Cart, on_delete=models.CASCADE)
+    book_id        = models.IntegerField()
+    quantity       = models.IntegerField(default=1)
+    price_snapshot = models.DecimalField(max_digits=10, decimal_places=2)
+    added_at       = models.DateTimeField(auto_now_add=True)
+
+---- views.py ----
+import os, requests
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .models import Cart, CartItem
+from .serializers import CartSerializer, CartItemSerializer
+
+BOOK_SERVICE_URL = os.environ.get('BOOK_SERVICE_URL', 'http://book-service:8000')
+
+class CartCreate(APIView):
+    def post(self, request):
+        s = CartSerializer(data=request.data)
+        if s.is_valid():
+            s.save()
+            return Response(s.data, status=201)
+        return Response(s.errors, status=400)
+
+class CartView(APIView):
+    def get(self, request, customer_id):
+        try:
+            cart = Cart.objects.get(customer_id=customer_id)
+        except Cart.DoesNotExist:
+            return Response({'error': 'Cart not found'}, status=404)
+        items = CartItem.objects.filter(cart=cart)
+        return Response({
+            'cart_id': cart.id,
+            'customer_id': cart.customer_id,
+            'items': CartItemSerializer(items, many=True).data
+        })
+
+class AddCartItem(APIView):
+    def post(self, request):
+        book_id  = request.data.get('book_id')
+        cart_id  = request.data.get('cart_id')
+        quantity = int(request.data.get('quantity', 1))
+
+        # Kiểm tra sách qua book-service
+        try:
+            r = requests.get(f'{BOOK_SERVICE_URL}/books/{book_id}/', timeout=5)
+            if r.status_code == 404:
+                return Response({'error': 'Book not found'}, status=404)
+            book = r.json()
+        except requests.RequestException:
+            return Response({'error': 'book-service unavailable'}, status=503)
+
+        if book.get('stock', 0) < quantity:
+            return Response({'error': 'Not enough stock'}, status=400)
+
+        data = {
+            'cart': cart_id,
+            'book_id': book_id,
+            'quantity': quantity,
+            'price_snapshot': book['price'],
+        }
+        s = CartItemSerializer(data=data)
+        if s.is_valid():
+            s.save()
+            return Response(s.data, status=201)
+        return Response(s.errors, status=400)
+
+class UpdateCartItem(APIView):
+    def put(self, request, pk):
+        try: item = CartItem.objects.get(pk=pk)
+        except CartItem.DoesNotExist: return Response({'error': 'Not found'}, status=404)
+        item.quantity = request.data.get('quantity', item.quantity)
+        item.save()
+        return Response(CartItemSerializer(item).data)
+
+    def delete(self, request, pk):
+        try: item = CartItem.objects.get(pk=pk)
+        except CartItem.DoesNotExist: return Response({'error': 'Not found'}, status=404)
+        item.delete()
+        return Response(status=204)
+
+class ClearCart(APIView):
+    def delete(self, request, cart_id):
+        CartItem.objects.filter(cart_id=cart_id).delete()
+        return Response(status=204)
+
+---- urls.py ----
+from django.urls import path
+from .views import CartCreate, CartView, AddCartItem, UpdateCartItem, ClearCart
+
+urlpatterns = [
+    path('carts/', CartCreate.as_view()),
+    path('carts/<int:customer_id>/', CartView.as_view()),
+    path('cart-items/', AddCartItem.as_view()),
+    path('cart-items/<int:pk>/', UpdateCartItem.as_view()),
+    path('carts/<int:cart_id>/items/', ClearCart.as_view()),
+]
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.6  manager-service — Port 8006
+     Domain: Identity — Manager Management
+────────────────────────────────────────────────────────────────────────────────
+
+Models:
+  Manager(id, name, email, department, level, created_at)
+  level: choices = ['junior', 'senior', 'director']
+
+Endpoints:
+  GET    /managers/         Danh sách managers
+  POST   /managers/         Tạo manager mới
+  GET    /managers/<id>/    Chi tiết manager
+  PUT    /managers/<id>/    Cập nhật thông tin
+  DELETE /managers/<id>/    Xóa manager
+
+Gọi tới service khác: (không có)
+
+---- models.py ----
+from django.db import models
+
+class Manager(models.Model):
+    LEVEL_CHOICES = [('junior','Junior'),('senior','Senior'),('director','Director')]
+    name       = models.CharField(max_length=255)
+    email      = models.EmailField(unique=True)
+    department = models.CharField(max_length=255)
+    level      = models.CharField(max_length=20, choices=LEVEL_CHOICES, default='junior')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.7  order-service — Port 8007
+     Domain: Ordering — Order Orchestration
+     !! Service phức tạp nhất — điều phối pay + ship !!
+────────────────────────────────────────────────────────────────────────────────
+
+Models:
+  Order(id, customer_id, status, total_price, pay_method,
+        ship_address, payment_id, shipment_id, created_at)
+  OrderItem(id, order, book_id, quantity, price, title_snapshot)
+  status: PENDING → CONFIRMED → CANCELLED
+
+Endpoints:
+  POST   /orders/                 Tạo đơn hàng (orchestrate)
+  GET    /orders/customer/<id>/   Lịch sử đơn hàng của customer
+  GET    /orders/<id>/            Chi tiết đơn hàng
+  PUT    /orders/<id>/status/     Cập nhật trạng thái đơn
+  GET    /orders/                 Tất cả đơn (admin)
+
+Gọi tới service khác:
+  → book-service:  GET /books/<id>/        (kiểm tra stock)
+  → book-service:  PUT /books/<id>/stock/  (giảm tồn kho)
+  → pay-service:   POST /payments/
+  → ship-service:  POST /shipments/
+  → cart-service:  DELETE /carts/<id>/items/  (xóa giỏ sau khi đặt)
+
+---- models.py ----
+from django.db import models
+
+class Order(models.Model):
+    STATUS_CHOICES = [('PENDING','Pending'),('CONFIRMED','Confirmed'),('CANCELLED','Cancelled')]
+    customer_id  = models.IntegerField()
+    status       = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    total_price  = models.DecimalField(max_digits=12, decimal_places=2)
+    pay_method   = models.CharField(max_length=50, default='cod')
+    ship_address = models.TextField()
+    payment_id   = models.IntegerField(null=True, blank=True)
+    shipment_id  = models.IntegerField(null=True, blank=True)
+    created_at   = models.DateTimeField(auto_now_add=True)
+
+class OrderItem(models.Model):
+    order          = models.ForeignKey(Order, on_delete=models.CASCADE,
+                                       related_name='items')
+    book_id        = models.IntegerField()
+    quantity       = models.IntegerField()
+    price          = models.DecimalField(max_digits=10, decimal_places=2)
+    title_snapshot = models.CharField(max_length=255)
+
+---- views.py (orchestrator pattern) ----
+import os, requests
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .models import Order, OrderItem
+from .serializers import OrderSerializer
+
+BOOK_SERVICE  = os.environ.get('BOOK_SERVICE_URL',  'http://book-service:8000')
+PAY_SERVICE   = os.environ.get('PAY_SERVICE_URL',   'http://pay-service:8000')
+SHIP_SERVICE  = os.environ.get('SHIP_SERVICE_URL',  'http://ship-service:8000')
+CART_SERVICE  = os.environ.get('CART_SERVICE_URL',  'http://cart-service:8000')
+
+class CreateOrder(APIView):
+    def post(self, request):
+        customer_id  = request.data['customer_id']
+        items        = request.data['items']     # [{book_id, quantity}]
+        pay_method   = request.data.get('pay_method', 'cod')
+        ship_address = request.data.get('ship_address', '')
+        cart_id      = request.data.get('cart_id')
+
+        # Bước 1: validate stock từng sách
+        validated = []
+        total = 0
+        for item in items:
+            try:
+                r = requests.get(f'{BOOK_SERVICE}/books/{item["book_id"]}/', timeout=5)
+                if r.status_code != 200:
+                    return Response({'error': f'Book {item["book_id"]} not found'}, status=404)
+                book = r.json()
+            except requests.RequestException:
+                return Response({'error': 'book-service unavailable'}, status=503)
+
+            if book['stock'] < item['quantity']:
+                return Response(
+                    {'error': f'Not enough stock for "{book["title"]}"'}, status=400)
+            validated.append({**item, 'price': book['price'], 'title': book['title']})
+            total += float(book['price']) * item['quantity']
+
+        # Bước 2: tạo Order + OrderItems
+        order = Order.objects.create(
+            customer_id=customer_id, status='PENDING',
+            total_price=total, pay_method=pay_method, ship_address=ship_address
+        )
+        for item in validated:
+            OrderItem.objects.create(
+                order=order, book_id=item['book_id'],
+                quantity=item['quantity'], price=item['price'],
+                title_snapshot=item['title']
+            )
+
+        # Bước 3: gọi pay-service
+        try:
+            pay_r = requests.post(f'{PAY_SERVICE}/payments/', timeout=5,
+                json={'order_id': order.id, 'amount': total, 'method': pay_method})
+            order.payment_id = pay_r.json().get('id')
+        except requests.RequestException:
+            pass
+
+        # Bước 4: gọi ship-service
+        try:
+            ship_r = requests.post(f'{SHIP_SERVICE}/shipments/', timeout=5,
+                json={'order_id': order.id, 'address': ship_address})
+            order.shipment_id = ship_r.json().get('id')
+        except requests.RequestException:
+            pass
+
+        # Bước 5: xác nhận đơn hàng
+        order.status = 'CONFIRMED'
+        order.save()
+
+        # Bước 6: giảm tồn kho
+        for item in validated:
+            try:
+                requests.put(f'{BOOK_SERVICE}/books/{item["book_id"]}/stock/', timeout=5,
+                    json={'decrease': item['quantity']})
+            except requests.RequestException:
+                pass
+
+        # Bước 7: xóa giỏ hàng
+        if cart_id:
+            try:
+                requests.delete(f'{CART_SERVICE}/carts/{cart_id}/items/', timeout=5)
+            except requests.RequestException:
+                pass
+
+        return Response(OrderSerializer(order).data, status=201)
+
+class OrdersByCustomer(APIView):
+    def get(self, request, customer_id):
+        orders = Order.objects.filter(customer_id=customer_id).order_by('-created_at')
+        return Response(OrderSerializer(orders, many=True).data)
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.8  pay-service — Port 8008
+     Domain: Payment — Payment Processing
+────────────────────────────────────────────────────────────────────────────────
+
+Models:
+  Payment(id, order_id, method, status, amount,
+          transaction_ref, paid_at, created_at)
+  status: PENDING → PAID | FAILED
+  method: cod | bank | card
+
+Endpoints:
+  POST   /payments/              Tạo payment cho đơn hàng
+  GET    /payments/<order_id>/   Lấy payment theo order
+  PUT    /payments/<id>/confirm/ Xác nhận thanh toán thành công
+  PUT    /payments/<id>/fail/    Đánh dấu thanh toán thất bại
+  GET    /payments/              Tất cả payments (admin)
+
+Gọi tới service khác: (không có)
+
+---- models.py ----
+from django.db import models
+
+class Payment(models.Model):
+    METHOD_CHOICES = [('cod','Cash on Delivery'),('bank','Bank Transfer'),('card','Card')]
+    STATUS_CHOICES = [('PENDING','Pending'),('PAID','Paid'),('FAILED','Failed')]
+    order_id        = models.IntegerField()
+    method          = models.CharField(max_length=20, choices=METHOD_CHOICES, default='cod')
+    status          = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    amount          = models.DecimalField(max_digits=12, decimal_places=2)
+    transaction_ref = models.CharField(max_length=100, blank=True)
+    paid_at         = models.DateTimeField(null=True, blank=True)
+    created_at      = models.DateTimeField(auto_now_add=True)
+
+---- views.py ----
+from django.utils import timezone
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .models import Payment
+from .serializers import PaymentSerializer
+
+class PaymentListCreate(APIView):
+    def get(self, request):
+        return Response(PaymentSerializer(Payment.objects.all(), many=True).data)
+
+    def post(self, request):
+        s = PaymentSerializer(data=request.data)
+        if s.is_valid():
+            s.save()
+            return Response(s.data, status=201)
+        return Response(s.errors, status=400)
+
+class PaymentByOrder(APIView):
+    def get(self, request, order_id):
+        try:
+            payment = Payment.objects.get(order_id=order_id)
+            return Response(PaymentSerializer(payment).data)
+        except Payment.DoesNotExist:
+            return Response({'error': 'Not found'}, status=404)
+
+class ConfirmPayment(APIView):
+    def put(self, request, pk):
+        try: payment = Payment.objects.get(pk=pk)
+        except Payment.DoesNotExist: return Response({'error': 'Not found'}, status=404)
+        payment.status  = 'PAID'
+        payment.paid_at = timezone.now()
+        payment.transaction_ref = request.data.get('transaction_ref', '')
+        payment.save()
+        return Response(PaymentSerializer(payment).data)
+
+class FailPayment(APIView):
+    def put(self, request, pk):
+        try: payment = Payment.objects.get(pk=pk)
+        except Payment.DoesNotExist: return Response({'error': 'Not found'}, status=404)
+        payment.status = 'FAILED'
+        payment.save()
+        return Response(PaymentSerializer(payment).data)
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.9  ship-service — Port 8009
+     Domain: Shipping — Shipment Tracking
+────────────────────────────────────────────────────────────────────────────────
+
+Models:
+  Shipment(id, order_id, address, status, tracking_code,
+           carrier, estimated_at, delivered_at, created_at)
+  status flow: PENDING → PROCESSING → SHIPPED → IN_TRANSIT → DELIVERED
+                                  ↘ CANCELLED
+
+Endpoints:
+  POST   /shipments/               Tạo shipment cho đơn hàng
+  GET    /shipments/<order_id>/    Lấy shipment theo order
+  PUT    /shipments/<id>/status/   Cập nhật trạng thái vận chuyển
+  GET    /shipments/               Tất cả shipments (admin)
+
+Gọi tới service khác: (không có)
+
+---- models.py ----
+import uuid
+from django.db import models
+
+class Shipment(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING','Pending'), ('PROCESSING','Processing'),
+        ('SHIPPED','Shipped'), ('IN_TRANSIT','In Transit'),
+        ('DELIVERED','Delivered'), ('CANCELLED','Cancelled'),
+    ]
+    order_id      = models.IntegerField()
+    address       = models.TextField()
+    status        = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    tracking_code = models.CharField(max_length=100, default='', blank=True)
+    carrier       = models.CharField(max_length=100, default='GHN', blank=True)
+    estimated_at  = models.DateTimeField(null=True, blank=True)
+    delivered_at  = models.DateTimeField(null=True, blank=True)
+    created_at    = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if not self.tracking_code:
+            self.tracking_code = f'TRK-{uuid.uuid4().hex[:8].upper()}'
+        super().save(*args, **kwargs)
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.10 comment-rate-service — Port 8010
+     Domain: Review — Rating & Comment
+────────────────────────────────────────────────────────────────────────────────
+
+Models:
+  Review(id, customer_id, book_id, rating, comment, created_at, updated_at)
+  rating: IntegerField, validators=[MinValueValidator(1), MaxValueValidator(5)]
+
+Endpoints:
+  POST   /reviews/                       Tạo review (kiểm tra book tồn tại)
+  GET    /reviews/book/<book_id>/        Reviews của một sách
+  GET    /reviews/customer/<cust_id>/    Reviews của một customer
+  PUT    /reviews/<id>/                  Chỉnh sửa review
+  DELETE /reviews/<id>/                  Xóa review
+  GET    /reviews/stats/<book_id>/       Thống kê: avg rating, total reviews
+
+Gọi tới service khác:
+  → book-service: GET /books/<id>/  (kiểm tra sách tồn tại trước khi review)
+
+---- models.py ----
+from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
+
+class Review(models.Model):
+    customer_id = models.IntegerField()
+    book_id     = models.IntegerField()
+    rating      = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    comment    = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('customer_id', 'book_id')  # 1 review/sách/customer
+
+---- views.py (stats endpoint) ----
+from django.db.models import Avg, Count
+from rest_framework.views import APIView
+from rest_framework.response import Response
+
+class ReviewStats(APIView):
+    def get(self, request, book_id):
+        reviews = Review.objects.filter(book_id=book_id)
+        stats   = reviews.aggregate(avg_rating=Avg('rating'), total=Count('id'))
+        return Response({
+            'book_id':    book_id,
+            'avg_rating': round(stats['avg_rating'] or 0, 1),
+            'total':      stats['total'],
+        })
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.11 recommender-ai-service — Port 8011
+     Domain: Recommendation — Rule-based (academic level)
+────────────────────────────────────────────────────────────────────────────────
+
+Models:
+  Recommendation(id, customer_id, book_ids_json, created_at)
+
+Endpoints:
+  GET  /recommendations/<customer_id>/   Top 10 sách gợi ý
+  POST /recommendations/train/           (Optional) Trigger re-compute
+
+Gọi tới service khác:
+  → order-service: GET /orders/customer/<id>/
+  → book-service:  GET /books/
+
+---- views.py (rule-based logic) ----
+import os, requests
+from rest_framework.views import APIView
+from rest_framework.response import Response
+
+ORDER_SERVICE = os.environ.get('ORDER_SERVICE_URL', 'http://order-service:8000')
+BOOK_SERVICE  = os.environ.get('BOOK_SERVICE_URL',  'http://book-service:8000')
+
+class GetRecommendations(APIView):
+    def get(self, request, customer_id):
+        # Bước 1: lấy lịch sử mua
+        try:
+            r = requests.get(
+                f'{ORDER_SERVICE}/orders/customer/{customer_id}/', timeout=5)
+            orders = r.json()
+        except requests.RequestException:
+            return Response({'error': 'order-service unavailable'}, status=503)
+
+        # Bước 2: tổng hợp book_id đã mua + catalog_id
+        bought_ids  = set()
+        catalog_ids = set()
+        for order in orders:
+            for item in order.get('items', []):
+                bought_ids.add(item['book_id'])
+
+        # Bước 3: lấy catalog_id từ book-service
+        for bid in bought_ids:
+            try:
+                r = requests.get(f'{BOOK_SERVICE}/books/{bid}/', timeout=5)
+                if r.status_code == 200:
+                    catalog_ids.add(r.json().get('catalog_id'))
+            except requests.RequestException:
+                pass
+
+        # Bước 4: lấy tất cả sách, lọc cùng catalog, chưa mua
+        try:
+            r    = requests.get(f'{BOOK_SERVICE}/books/', timeout=5)
+            all_books = r.json()
+        except requests.RequestException:
+            return Response({'error': 'book-service unavailable'}, status=503)
+
+        recommended = [
+            b for b in all_books
+            if b.get('catalog_id') in catalog_ids
+            and b['id'] not in bought_ids
+        ][:10]
+
+        return Response({
+            'customer_id': customer_id,
+            'recommendations': recommended,
+            'total': len(recommended),
+        })
+
+
+────────────────────────────────────────────────────────────────────────────────
+4.12 api-gateway — Port 8000
+     Vai trò: Routing, Proxy, Render HTML templates
+────────────────────────────────────────────────────────────────────────────────
+
+Models: (không có — chỉ proxy)
+
+Endpoints (proxy đến services):
+  GET    /books/                    Render books.html ← book-service
+  POST   /books/                    Proxy POST → book-service
+  GET    /cart/<customer_id>/       Render cart.html ← cart-service
+  GET    /orders/<customer_id>/     Render orders.html ← order-service
+  POST   /orders/                   Proxy POST → order-service
+  GET    /recommendations/<id>/     Proxy GET → recommender-ai-service
+
+---- views.py ----
+import os, requests
+from django.shortcuts import render
+
+BOOK_SERVICE    = os.environ.get('BOOK_SERVICE_URL',    'http://book-service:8000')
+CART_SERVICE    = os.environ.get('CART_SERVICE_URL',    'http://cart-service:8000')
+ORDER_SERVICE   = os.environ.get('ORDER_SERVICE_URL',   'http://order-service:8000')
+RECOMMENDER_URL = os.environ.get('RECOMMENDER_URL',     'http://recommender-ai-service:8000')
+
+def book_list(request):
+    r = requests.get(f'{BOOK_SERVICE}/books/', timeout=5)
+    return render(request, 'books.html', {'books': r.json()})
+
+def view_cart(request, customer_id):
+    r = requests.get(f'{CART_SERVICE}/carts/{customer_id}/', timeout=5)
+    return render(request, 'cart.html', {'data': r.json(), 'customer_id': customer_id})
+
+def order_history(request, customer_id):
+    r = requests.get(f'{ORDER_SERVICE}/orders/customer/{customer_id}/', timeout=5)
+    return render(request, 'orders.html', {'orders': r.json()})
+
+def recommendations(request, customer_id):
+    r = requests.get(f'{RECOMMENDER_URL}/recommendations/{customer_id}/', timeout=5)
+    return render(request, 'recommendations.html', {'data': r.json()})
+
+---- templates/books.html ----
+<h2>Book List</h2>
+<ul>
+{% for book in books %}
+  <li>{{ book.title }} — {{ book.author }} — {{ book.price }} VND</li>
+{% endfor %}
+</ul>
+
+---- templates/cart.html ----
+<h2>Your Cart</h2>
+<ul>
+{% for item in data.items %}
+  <li>Book #{{ item.book_id }} | Qty: {{ item.quantity }} | {{ item.price_snapshot }} VND</li>
+{% endfor %}
+</ul>
+
+
+================================================================================
+5. LUỒNG GIAO TIẾP INTER-SERVICE
+================================================================================
+
+────────────────────────────────────────────
+Luồng 1 — Đăng ký khách hàng
+────────────────────────────────────────────
+  Client
+    ↓ POST /customers/ {name, email, phone}
+  customer-service
+    → lưu Customer vào DB
+    → POST /carts/ {customer_id}  →  cart-service
+                                       → tạo Cart trống
+    ← trả Customer JSON cho Client
+
+────────────────────────────────────────────
+Luồng 2 — Thêm sách vào giỏ
+────────────────────────────────────────────
+  Client
+    ↓ POST /cart-items/ {cart_id, book_id, quantity}
+  cart-service
+    → GET /books/<book_id>/  →  book-service
+                                  ← {title, price, stock}
+    → Nếu stock < quantity: trả lỗi 400
+    → lưu CartItem {book_id, quantity, price_snapshot}
+    ← trả CartItem JSON cho Client
+
+────────────────────────────────────────────
+Luồng 3 — Đặt hàng (Orchestrator)
+────────────────────────────────────────────
+  Client
+    ↓ POST /orders/ {customer_id, items[], pay_method, ship_address, cart_id}
+  order-service
+    → GET /books/<id>/  →  book-service  (kiểm tra từng sách)
+    → Tạo Order(status=PENDING) + OrderItems
+    → POST /payments/  →  pay-service   → lưu Payment(PENDING)
+    → POST /shipments/ →  ship-service  → lưu Shipment(PENDING)
+    → Cập nhật Order(status=CONFIRMED)
+    → PUT /books/<id>/stock/  →  book-service  (giảm tồn kho)
+    → DELETE /carts/<id>/items/  →  cart-service  (xóa giỏ)
+    ← trả Order JSON cho Client
+
+────────────────────────────────────────────
+Luồng 4 — Đánh giá sách
+────────────────────────────────────────────
+  Client
+    ↓ POST /reviews/ {customer_id, book_id, rating, comment}
+  comment-rate-service
+    → GET /books/<book_id>/  →  book-service
+    → Nếu sách không tồn tại: trả lỗi 404
+    → lưu Review
+    ← trả Review JSON cho Client
+
+────────────────────────────────────────────
+Luồng 5 — Gợi ý sách
+────────────────────────────────────────────
+  Client
+    ↓ GET /recommendations/<customer_id>/
+  recommender-ai-service
+    → GET /orders/customer/<id>/  →  order-service  (lịch sử mua)
+    → GET /books/<id>/  →  book-service  (lấy catalog_id từng sách đã mua)
+    → GET /books/  →  book-service  (tất cả sách)
+    → Tính toán: sách cùng catalog, chưa mua, top 10
+    ← trả [{book_id, title, price, ...}] cho Client
+
+
+================================================================================
+6. DOCKER COMPOSE ĐẦY ĐỦ
+================================================================================
+
+version: '3.8'
+
+services:
+  api-gateway:
+    build: ./api-gateway
+    ports: ['8000:8000']
+    environment:
+      - BOOK_SERVICE_URL=http://book-service:8000
+      - CART_SERVICE_URL=http://cart-service:8000
+      - ORDER_SERVICE_URL=http://order-service:8000
+      - RECOMMENDER_URL=http://recommender-ai-service:8000
+    depends_on:
+      - book-service
+      - cart-service
+      - order-service
+      - recommender-ai-service
+
+  staff-service:
+    build: ./staff-service
+    ports: ['8001:8000']
+
+  customer-service:
+    build: ./customer-service
+    ports: ['8002:8000']
+    environment:
+      - CART_SERVICE_URL=http://cart-service:8000
+    depends_on:
+      - cart-service
+
+  book-service:
+    build: ./book-service
+    ports: ['8003:8000']
+
+  catalog-service:
+    build: ./catalog-service
+    ports: ['8004:8000']
+    environment:
+      - BOOK_SERVICE_URL=http://book-service:8000
+    depends_on:
+      - book-service
+
+  cart-service:
+    build: ./cart-service
+    ports: ['8005:8000']
+    environment:
+      - BOOK_SERVICE_URL=http://book-service:8000
+    depends_on:
+      - book-service
+
+  manager-service:
+    build: ./manager-service
+    ports: ['8006:8000']
+
+  order-service:
+    build: ./order-service
+    ports: ['8007:8000']
+    environment:
+      - BOOK_SERVICE_URL=http://book-service:8000
+      - PAY_SERVICE_URL=http://pay-service:8000
+      - SHIP_SERVICE_URL=http://ship-service:8000
+      - CART_SERVICE_URL=http://cart-service:8000
+    depends_on:
+      - book-service
+      - pay-service
+      - ship-service
+      - cart-service
+
+  pay-service:
+    build: ./pay-service
+    ports: ['8008:8000']
+
+  ship-service:
+    build: ./ship-service
+    ports: ['8009:8000']
+
+  comment-rate-service:
+    build: ./comment-rate-service
+    ports: ['8010:8000']
+    environment:
+      - BOOK_SERVICE_URL=http://book-service:8000
+    depends_on:
+      - book-service
+
+  recommender-ai-service:
+    build: ./recommender-ai-service
+    ports: ['8011:8000']
+    environment:
+      - ORDER_SERVICE_URL=http://order-service:8000
+      - BOOK_SERVICE_URL=http://book-service:8000
+    depends_on:
+      - order-service
+      - book-service
+
+Chạy toàn bộ hệ thống:
+  docker-compose up --build
+
+Chạy một service riêng lẻ:
+  docker-compose up book-service
+
+Xem log:
+  docker-compose logs -f order-service
+
+
+================================================================================
+7. LỊCH TRÌNH THỰC HIỆN (12 NGÀY)
+================================================================================
+
+  Ngày  Công việc
+  ────  ──────────────────────────────────────────────────────────────────────
+  1     Tạo bookstore-microservice/ folder
+        Init 12 Django project (django-admin startproject)
+        Viết Dockerfile và requirements.txt chuẩn cho tất cả service
+
+  2     Hoàn thành staff-service và manager-service
+        (leaf services, không phụ thuộc service khác)
+        Test CRUD bằng curl hoặc Postman
+
+  3     Hoàn thành book-service và catalog-service
+        Test thêm/sửa/xóa sách và danh mục
+        Test filter /books/?catalog_id=1
+
+  4     Hoàn thành customer-service và cart-service
+        Test inter-service flow: POST /customers/ → tự tạo cart
+        Test thêm sách vào giỏ qua cart-service
+
+  5     Hoàn thành pay-service và ship-service
+        Hoàn thành order-service (orchestrator)
+        Test full order flow: đặt hàng → pay → ship → CONFIRMED
+
+  6     Hoàn thành comment-rate-service
+        Hoàn thành recommender-ai-service
+        Test review sách và gợi ý
+
+  7     Xây dựng api-gateway
+        Viết views proxy và HTML templates (books.html, cart.html, orders.html)
+        Test routing qua gateway
+
+  8     Viết docker-compose.yml đầy đủ
+        Test docker-compose up --build
+        Fix lỗi network, depends_on, migration
+
+  9     Integration test toàn bộ end-to-end:
+          → Đăng ký customer → xem cart tự tạo
+          → Staff thêm sách
+          → Customer thêm giỏ → đặt hàng → thanh toán → giao hàng
+          → Đánh giá sách → xem gợi ý
+
+  10    Thêm error handling cho tất cả inter-service calls
+        Xử lý 404, 400, 503 với message rõ ràng
+        Test edge cases: sách hết hàng, service down
+
+  11    Viết API documentation (Postman Collection)
+        Vẽ architecture diagram
+        Viết technical report (8-12 trang)
+
+  12    Quay demo video 10 phút
+        Chuẩn bị slide thuyết trình
+        Push code lên GitHub, viết README.md
+
+
+================================================================================
+8. CHECKLIST DELIVERABLES
+================================================================================
+
+GitHub Repository:
+  [ ] Root folder: bookstore-microservice/
+  [ ] 12 service folder, mỗi cái có Dockerfile riêng
+  [ ] docker-compose.yml ở root
+  [ ] README.md hướng dẫn: git clone → docker-compose up --build
+  [ ] Mỗi service migrate OK, không lỗi khi startup
+
+Architecture Diagrams:
+  [ ] Sơ đồ tổng thể 12 service + API Gateway
+  [ ] Sơ đồ DDD: Bounded Context Mapping
+  [ ] Sơ đồ luồng: customer registration flow
+  [ ] Sơ đồ luồng: order placement flow
+  [ ] Database schema từng service
+
+API Documentation:
+  [ ] Postman Collection hoặc Swagger/OpenAPI
+  [ ] Đầy đủ: endpoint, method, request body, response example
+  [ ] Test case cho 5 luồng chính
+
+Demo Video (10 phút):
+  [ ] docker-compose up --build thành công
+  [ ] Đăng ký customer → xem cart tự tạo
+  [ ] Staff thêm sách mới
+  [ ] Customer thêm sách vào giỏ
+  [ ] Đặt hàng → xem trạng thái thanh toán + giao hàng
+  [ ] Đánh giá sách
+  [ ] Xem gợi ý sách
+
+Technical Report (8-12 trang):
+  [ ] Giới thiệu: monolithic vs microservices
+  [ ] DDD decomposition: Bounded Context table
+  [ ] Thiết kế từng service: model, API, dependencies
+  [ ] Kiến trúc triển khai Docker Compose
+  [ ] Kết quả đạt được và hạn chế
+
+
+================================================================================
+9. LƯU Ý QUAN TRỌNG KHI IMPLEMENT
+================================================================================
+
+NHỮNG LỖI THƯỜNG GẶP
+----------------------
+  1. Hardcode URL
+     SAI:  CART_SERVICE_URL = 'http://localhost:8005'
+     ĐÚNG: CART_SERVICE_URL = os.environ.get('CART_SERVICE_URL', 'http://cart-service:8000')
+
+  2. Không có timeout
+     SAI:  requests.get(url)
+     ĐÚNG: requests.get(url, timeout=5)
+
+  3. Không xử lý exception
+     SAI:  r = requests.get(url); data = r.json()
+     ĐÚNG: try/except requests.RequestException
+
+  4. Import model từ service khác
+     SAI:  from book_service.app.models import Book
+     ĐÚNG: Gọi qua REST API, không bao giờ import cross-service
+
+  5. Quên migrate trong Dockerfile
+     Thêm: RUN python manage.py migrate --run-syncdb
+
+  6. ALLOWED_HOSTS bị chặn
+     Thêm vào settings.py: ALLOWED_HOSTS = ['*']
+
+PATTERN XỬ LÝ LỖI INTER-SERVICE (dùng lại ở mọi service)
+----------------------------------------------------------
+  def call_service(url, method='GET', data=None, timeout=5):
+      try:
+          if method == 'GET':
+              r = requests.get(url, timeout=timeout)
+          elif method == 'POST':
+              r = requests.post(url, json=data, timeout=timeout)
+          elif method == 'PUT':
+              r = requests.put(url, json=data, timeout=timeout)
+          else:
+              r = requests.delete(url, timeout=timeout)
+          r.raise_for_status()
+          return r.json(), None
+      except requests.Timeout:
+          return None, 'Service timeout'
+      except requests.ConnectionError:
+          return None, 'Service unavailable'
+      except requests.HTTPError as e:
+          return None, f'HTTP error: {e.response.status_code}'
+
+THỨ TỰ BUILD (tránh depends_on lỗi)
+--------------------------------------
+  Tier 1 (leaf, không phụ thuộc ai):
+    book-service, staff-service, manager-service, pay-service, ship-service
+
+  Tier 2 (phụ thuộc Tier 1):
+    cart-service          → cần book-service
+    catalog-service       → cần book-service
+    customer-service      → cần cart-service
+    comment-rate-service  → cần book-service
+
+  Tier 3 (phụ thuộc nhiều service):
+    order-service         → cần book, pay, ship, cart
+    recommender-ai-service→ cần order, book
+
+  Tier 4 (entry point):
+    api-gateway           → cần tất cả
+
+KIỂM TRA NHANH MỖI SERVICE SAU KHI VIẾT XONG
+----------------------------------------------
+  # Chạy service đơn lẻ
+  cd <service-name>
+  python -m venv venv && source venv/bin/activate
+  pip install -r requirements.txt
+  python manage.py migrate
+  python manage.py runserver 0.0.0.0:<port>
+
+  # Test bằng curl
+  curl http://localhost:<port>/<endpoint>/
+  curl -X POST http://localhost:<port>/<endpoint>/ \
+       -H "Content-Type: application/json" \
+       -d '{"field": "value"}'
+
+
+================================================================================
+  END OF DOCUMENT
+  Assignment 05 — BookStore Microservice | Software Architecture & Design
+================================================================================

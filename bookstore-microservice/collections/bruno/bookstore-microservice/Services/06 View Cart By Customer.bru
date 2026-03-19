@@ -1,0 +1,11 @@
+meta {
+  name: 06 View Cart By Customer
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{cart_service_url}}/carts/{{customer_id}}/
+  body: none
+  auth: none
+}

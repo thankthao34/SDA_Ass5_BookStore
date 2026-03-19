@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="grid two-col">
+    <article class="panel panel-form">
+        {% if book %}
+        <h2>{{ book.title }}</h2>
+        <p class="muted">Author: {{ book.author }}</p>
+        <div class="pill-row">
+            <span>ID: {{ book.id }}</span>
+            <span>Price: ${{ book.price }}</span>
+            <span>Stock: {{ book.stock }}</span>
+            {% if book.catalog_id %}
+            <span>Catalog: {{ book.catalog_id }}</span>
+            {% endif %}
+        </div>
+
+        <h3 class="subheading">Rating Summary</h3>
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <span class="kpi-label">Average Rating</span>
+                <strong class="kpi-value">{{ stats.avg_rating|default:0 }}</strong>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Total Reviews</span>
+                <strong class="kpi-value">{{ stats.total|default:0 }}</strong>
+            </div>
+        </div>
+
+        <h3 class="subheading">Write A Review</h3>
+        {% if can_review %}
+        <form method="post" class="stacked-form">
+            {% csrf_token %}
+            <label>Rating (1-5)
+                <input name="rating" type="number" min="1" max="5" step="1" placeholder="5" required />
+            </label>
+            <label>Comment
+                <input name="comment" type="text" placeholder="Good quality and useful content." />
+            </label>
+            <button type="submit">Submit Review</button>
+        </form>
+        {% else %}
+        <div class="empty-state">{{ review_block_reason }}</div>
+        {% endif %}
+        {% else %}
+        <h2>Book Details</h2>
+        <div class="empty-state">Book data is unavailable.</div>
+        {% endif %}
+    </article>
+
+    <article class="panel panel-list">
+        <h2>Previous Reviews</h2>
+        <a class="table-link" href="{% url 'books' %}">Back to Books</a>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Review ID</th>
+                        <th>Customer</th>
+                        <th>Rating</th>
+                        <th>Comment</th>
+                        <th>Created At</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for review in reviews %}
+                    <tr>
+                        <td>{{ review.id }}</td>
+                        <td>{{ review.customer_id }}</td>
+                        <td>{{ review.rating }}</td>
+                        <td>{{ review.comment|default:'-' }}</td>
+                        <td>{{ review.created_at }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5">No reviews for this book yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+</section>
+{% endblock %}

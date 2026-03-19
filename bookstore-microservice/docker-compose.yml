@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api-gateway/db.sqlite3:/app/db.sqlite3
+    environment:
+      - BOOK_SERVICE_URL=http://book-service:8000
+      - CART_SERVICE_URL=http://cart-service:8000
+      - CUSTOMER_SERVICE_URL=http://customer-service:8000
+      - ORDER_SERVICE_URL=http://order-service:8000
+      - RECOMMENDER_URL=http://recommender-ai-service:8000
+    depends_on:
+      - customer-service
+      - book-service
+      - cart-service
+      - order-service
+      - recommender-ai-service
+
+  staff-service:
+    build: ./staff-service
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./staff-service/db.sqlite3:/app/db.sqlite3
+
+  customer-service:
+    build: ./customer-service
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./customer-service/db.sqlite3:/app/db.sqlite3
+    environment:
+      - CART_SERVICE_URL=http://cart-service:8000
+    depends_on:
+      - cart-service
+
+  book-service:
+    build: ./book-service
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./book-service/db.sqlite3:/app/db.sqlite3
+
+  catalog-service:
+    build: ./catalog-service
+    ports:
+      - "8004:8000"
+    volumes:
+      - ./catalog-service/db.sqlite3:/app/db.sqlite3
+    environment:
+      - BOOK_SERVICE_URL=http://book-service:8000
+    depends_on:
+      - book-service
+
+  cart-service:
+    build: ./cart-service
+    ports:
+      - "8005:8000"
+    volumes:
+      - ./cart-service/db.sqlite3:/app/db.sqlite3
+    environment:
+      - BOOK_SERVICE_URL=http://book-service:8000
+    depends_on:
+      - book-service
+
+  manager-service:
+    build: ./manager-service
+    ports:
+      - "8006:8000"
+    volumes:
+      - ./manager-service/db.sqlite3:/app/db.sqlite3
+
+  order-service:
+    build: ./order-service
+    ports:
+      - "8007:8000"
+    volumes:
+      - ./order-service/db.sqlite3:/app/db.sqlite3
+    environment:
+      - BOOK_SERVICE_URL=http://book-service:8000
+      - PAY_SERVICE_URL=http://pay-service:8000
+      - SHIP_SERVICE_URL=http://ship-service:8000
+      - CART_SERVICE_URL=http://cart-service:8000
+    depends_on:
+      - book-service
+      - pay-service
+      - ship-service
+      - cart-service
+
+  pay-service:
+    build: ./pay-service
+    ports:
+      - "8008:8000"
+    volumes:
+      - ./pay-service/db.sqlite3:/app/db.sqlite3
+
+  ship-service:
+    build: ./ship-service
+    ports:
+      - "8009:8000"
+    volumes:
+      - ./ship-service/db.sqlite3:/app/db.sqlite3
+
+  comment-rate-service:
+    build: ./comment-rate-service
+    ports:
+      - "8010:8000"
+    volumes:
+      - ./comment-rate-service/db.sqlite3:/app/db.sqlite3
+    environment:
+      - BOOK_SERVICE_URL=http://book-service:8000
+    depends_on:
+      - book-service
+
+  recommender-ai-service:
+    build: ./recommender-ai-service
+    ports:
+      - "8011:8000"
+    volumes:
+      - ./recommender-ai-service/db.sqlite3:/app/db.sqlite3
+    environment:
+      - ORDER_SERVICE_URL=http://order-service:8000
+      - BOOK_SERVICE_URL=http://book-service:8000
+      - COMMENT_RATE_SERVICE_URL=http://comment-rate-service:8000
+    depends_on:
+      - order-service
+      - book-service
+      - comment-rate-service

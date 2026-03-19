@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="grid two-col">
+    <article class="panel panel-list">
+        <h2>Role Dashboard</h2>
+        <p class="muted">Your role controls what actions are available in the gateway.</p>
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <span class="kpi-label">Current Role</span>
+                <strong class="kpi-value">{{ profile.role|upper }}</strong>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Username</span>
+                <strong class="kpi-value">{{ request.user.username }}</strong>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Customer Scope</span>
+                <strong class="kpi-value">
+                    {% if profile.customer_id %}
+                    #{{ profile.customer_id }}
+                    {% else %}
+                    N/A
+                    {% endif %}
+                </strong>
+            </div>
+        </div>
+    </article>
+
+    <article class="panel panel-form">
+        <h2>Quick Actions</h2>
+        <div class="quick-links">
+            <a class="quick-link" href="{% url 'books' %}">Browse Books</a>
+            {% if profile.role != 'customer' %}
+            <a class="quick-link" href="{% url 'customers' %}">Manage Customers</a>
+            <a class="quick-link" href="{% url 'catalog' %}">Catalog Mapping</a>
+            {% endif %}
+            {% if profile.role == 'admin' or profile.role == 'manager' %}
+            <a class="quick-link" href="{% url 'staffs' %}">Staff Service</a>
+            {% endif %}
+            {% if profile.role == 'admin' %}
+            <a class="quick-link" href="{% url 'managers' %}">Manager Service</a>
+            {% endif %}
+            {% if profile.role == 'admin' or profile.role == 'manager' %}
+            <a class="quick-link" href="{% url 'manage-orders' %}">Manage Order Status</a>
+            <a class="quick-link" href="{% url 'payments' %}">Manage Payments</a>
+            {% endif %}
+            {% if profile.role == 'admin' or profile.role == 'manager' or profile.role == 'staff' %}
+            <a class="quick-link" href="{% url 'manage-shipments' %}">Manage Shipment Status</a>
+            {% endif %}
+            <a class="quick-link" href="{% url 'reviews' %}">Reviews & Ratings</a>
+            {% if profile.customer_id %}
+            <a class="quick-link" href="{% url 'cart' profile.customer_id %}">Open My Cart</a>
+            <a class="quick-link" href="{% url 'orders' profile.customer_id %}">Open My Orders</a>
+            <a class="quick-link" href="{% url 'recommendations' profile.customer_id %}">Open Recommendations</a>
+            {% endif %}
+        </div>
+    </article>
+</section>
+{% endblock %}

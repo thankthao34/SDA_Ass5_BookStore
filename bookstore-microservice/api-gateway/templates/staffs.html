@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="grid two-col">
+    <article class="panel panel-form">
+        <h2>Staff Service</h2>
+        <p class="muted">Create internal operators. Staff users connect directly to shipment operations and support order flow.</p>
+        <form method="post" class="stacked-form">
+            {% csrf_token %}
+            <input type="hidden" name="q" value="{{ search_query }}" />
+            <label>Name
+                <input name="name" type="text" placeholder="Nguyen Van A" required />
+            </label>
+            <label>Email
+                <input name="email" type="email" placeholder="staff@example.com" required />
+            </label>
+            <div class="inline-fields">
+                <label>Role
+                    <select name="role">
+                        {% for role in staff_role_choices %}
+                        <option value="{{ role }}">{{ role }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Department
+                    <input name="department" type="text" placeholder="Warehouse" />
+                </label>
+            </div>
+            <button type="submit">Create Staff</button>
+        </form>
+        <p class="muted">Related flows: <a class="table-link" href="{% url 'manage-shipments' %}">Ship Service</a> and <a class="table-link" href="{% url 'manage-orders' %}">Order Ops</a>.</p>
+    </article>
+
+    <article class="panel panel-list">
+        <h2>Staff Directory</h2>
+        <form method="get" class="search-row">
+            <input name="q" type="text" value="{{ search_query }}" placeholder="Search by id, name, email, role, department..." />
+            <button type="submit">Search</button>
+            {% if search_query %}
+            <a class="table-link" href="{% url 'staffs' %}">Clear</a>
+            {% endif %}
+        </form>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Department</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for staff in staffs %}
+                    <tr>
+                        <td>{{ staff.id }}</td>
+                        <td>{{ staff.name }}</td>
+                        <td>{{ staff.email }}</td>
+                        <td>{{ staff.role }}</td>
+                        <td>{{ staff.department|default:'-' }}</td>
+                        <td>{{ staff.created_at }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6">No staff records found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+</section>
+{% endblock %}

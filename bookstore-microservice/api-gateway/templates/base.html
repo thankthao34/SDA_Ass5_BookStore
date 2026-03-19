@@ -1,0 +1,88 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BookStore Microservice</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{% static 'css/style.css' %}" />
+</head>
+<body>
+    <div class="background-shape background-shape-one"></div>
+    <div class="background-shape background-shape-two"></div>
+
+    <header class="site-header">
+        <div class="brand-block">
+            <span class="brand-kicker">Distributed System Demo</span>
+            <h1>BookStore Microservice Hub</h1>
+            <p class="brand-subtitle">Role-based operations, service orchestration, and recommendation insights.</p>
+        </div>
+        <nav class="site-nav">
+            {% if request.user.is_authenticated %}
+            <a href="{% url 'home' %}">Dashboard</a>
+            <a href="{% url 'books' %}">Books</a>
+            {% if auth_profile.role != 'customer' %}
+            <a href="{% url 'customers' %}">Customers</a>
+            <a href="{% url 'catalog' %}">Catalog</a>
+            {% if auth_profile.role == 'admin' or auth_profile.role == 'manager' %}
+            <a href="{% url 'staffs' %}">Staff</a>
+            {% endif %}
+            {% if auth_profile.role == 'admin' %}
+            <a href="{% url 'managers' %}">Managers</a>
+            {% endif %}
+                {% if auth_profile.role == 'admin' or auth_profile.role == 'manager' %}
+                <a href="{% url 'manage-orders' %}">Order Ops</a>
+                <a href="{% url 'payments' %}">Pay Ops</a>
+                {% endif %}
+                {% if auth_profile.role == 'admin' or auth_profile.role == 'manager' or auth_profile.role == 'staff' %}
+                <a href="{% url 'manage-shipments' %}">Ship Ops</a>
+                {% endif %}
+            <a href="{% url 'reviews' %}">Reviews</a>
+            {% else %}
+                {% if auth_profile.customer_id %}
+                <a href="{% url 'cart' auth_profile.customer_id %}">My Cart</a>
+                <a href="{% url 'orders' auth_profile.customer_id %}">My Orders</a>
+                <a href="{% url 'recommendations' auth_profile.customer_id %}">My Recs</a>
+                {% endif %}
+            <a href="{% url 'reviews' %}">My Reviews</a>
+            {% endif %}
+            <a href="{% url 'logout' %}">Logout</a>
+            {% else %}
+            <a href="{% url 'login' %}">Login</a>
+            {% endif %}
+        </nav>
+    </header>
+
+    <main class="container">
+        {% if request.user.is_authenticated %}
+        <div class="session-chip">
+            Signed in as <strong>{{ request.user.username }}</strong>
+            {% if auth_profile %}
+            <span class="role-tag">{{ auth_profile.role|upper }}</span>
+            {% if auth_profile.customer_id %}
+            <span class="role-tag">Customer #{{ auth_profile.customer_id }}</span>
+            {% endif %}
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if messages %}
+            {% for flash in messages %}
+            <div class="alert {% if flash.tags == 'error' %}alert-error{% else %}alert-info{% endif %}">{{ flash }}</div>
+            {% endfor %}
+        {% endif %}
+
+        {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+        {% if message %}
+        <div class="alert alert-info">{{ message }}</div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

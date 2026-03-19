@@ -1,0 +1,200 @@
+SUPER PROMPT FOR COPILOT / AI CODING AGENT Generate Full Django
+Microservice BookStore System (Assignment 05)
+
+Goal: Generate a complete Django REST microservice project for a
+BookStore system. The architecture must follow microservice principles
+with separate services and Docker Compose orchestration.
+
+Tech Stack: - Python - Django - Django REST Framework - Docker - Docker
+Compose - requests library for service communication - SQLite (per
+service database)
+
+Services to implement: 1. customer-service 2. book-service 3.
+cart-service 4. api-gateway
+
+Each service must be an independent Django project.
+
+  ------------------------
+  PROJECT ROOT STRUCTURE
+  ------------------------
+
+bookstore-microservice/ │ ├── customer-service/ ├── book-service/ ├──
+cart-service/ ├── api-gateway/ ├── docker-compose.yml └── README.md
+
+  ------------------
+  CUSTOMER SERVICE
+  ------------------
+
+Responsibilities: - Manage customers - Create customer - List
+customers - Call cart-service to create cart automatically
+
+Endpoints:
+
+GET /customers/ POST /customers/
+
+POST logic: 1. Save customer 2. Call cart-service endpoint POST /carts/
+
+Model:
+
+Customer - id - name - email
+
+Files required:
+
+models.py serializers.py views.py urls.py
+
+Use APIView from Django REST Framework.
+
+  --------------
+  BOOK SERVICE
+  --------------
+
+Responsibilities: - Manage books - Create books - List books
+
+Endpoints:
+
+GET /books/ POST /books/
+
+Model:
+
+Book - id - title - author - price - stock
+
+Files required:
+
+models.py serializers.py views.py urls.py
+
+  --------------
+  CART SERVICE
+  --------------
+
+Responsibilities: - Create cart - Add items to cart - View cart
+
+Endpoints:
+
+POST /carts/ POST /cart-items/ GET /carts/{customer_id}/
+
+Models:
+
+Cart - id - customer_id
+
+CartItem - id - cart_id - book_id - quantity
+
+Logic:
+
+When adding item to cart: 1. Call book-service GET /books/ 2. Check if
+book exists 3. If exists -> add item
+
+  -------------
+  API GATEWAY
+  -------------
+
+Responsibilities: - Serve HTML pages - Call microservices - Display
+results
+
+Views required:
+
+book_list() view_cart()
+
+Gateway calls:
+
+GET book-service /books/ GET cart-service /carts/{customer_id}/
+
+Templates:
+
+templates/books.html templates/cart.html
+
+books.html example:
+
+Book List
+{% for book in books %}
+{{ book.title }} - {{ book.price }}
+{% endfor %}
+cart.html example:
+
+Your Cart
+{% for item in items %}
+Book ID: {{ item.book_id }} | Qty: {{ item.quantity }}
+{% endfor %}
+  -----------------------------
+  INTER SERVICE COMMUNICATION
+  -----------------------------
+
+Use Python requests library.
+
+Example:
+
+requests.get(“http://book-service:8000/books/”)
+
+requests.post( “http://cart-service:8000/carts/”, json={“customer_id”:
+customer.id} )
+
+  ----------------------
+  DOCKER CONFIGURATION
+  ----------------------
+
+Each service must include:
+
+Dockerfile requirements.txt
+
+requirements.txt:
+
+django djangorestframework requests
+
+Dockerfile example:
+
+FROM python:3.10 WORKDIR /app COPY . . RUN pip install -r
+requirements.txt CMD [“python”,“manage.py”,“runserver”,“0.0.0.0:8000”]
+
+  ----------------
+  DOCKER COMPOSE
+  ----------------
+
+docker-compose.yml must start all services.
+
+services:
+
+customer-service: build: ./customer-service ports: - “8001:8000”
+
+book-service: build: ./book-service ports: - “8002:8000”
+
+cart-service: build: ./cart-service ports: - “8003:8000”
+
+api-gateway: build: ./api-gateway ports: - “8000:8000”
+
+  --------------
+  CODING RULES
+  --------------
+
+-   Use Django REST Framework APIView
+-   Keep services independent
+-   Each service has its own database
+-   No direct DB sharing between services
+-   Communication only via REST
+
+  -------------------
+  DEVELOPMENT ORDER
+  -------------------
+
+1.  Create root project folder
+2.  Generate customer-service Django project
+3.  Implement customer model, serializer, API
+4.  Generate book-service
+5.  Implement book APIs
+6.  Generate cart-service
+7.  Implement cart APIs and book validation
+8.  Generate api-gateway
+9.  Implement HTML views
+10. Add Dockerfiles
+11. Create docker-compose.yml
+12. Run docker-compose up –build
+
+  -----------------
+  EXPECTED RESULT
+  -----------------
+
+Working microservice system with:
+
+-   Customer registration
+-   Automatic cart creation
+-   Book management
+-   Add books to cart
+-   View cart via web interface

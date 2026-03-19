@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="panel panel-list">
+    <h2>Order History - Customer #{{ customer_id }}</h2>
+    <p class="muted">Data proxied from order-service. Review button appears only when shipment status is DELIVERED.</p>
+    <form method="get" class="search-row">
+        <input name="q" type="text" value="{{ search_query }}" placeholder="Search by order ID, status, pay method, item book ID..." />
+        <button type="submit">Search</button>
+        {% if search_query %}
+        <a class="table-link" href="{% url 'orders' customer_id %}">Clear</a>
+        {% endif %}
+    </form>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Status</th>
+                    <th>Total</th>
+                    <th>Pay Method</th>
+                    <th>Items</th>
+                    <th>Payment ID</th>
+                    <th>Shipment ID</th>
+                    <th>Shipment Status</th>
+                    <th>Created At</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td>{{ order.id }}</td>
+                    <td>{{ order.status }}</td>
+                    <td>{{ order.total_price }}</td>
+                    <td>{{ order.pay_method }}</td>
+                    <td>
+                        {% if order.items %}
+                        <div class="order-item-list">
+                            {% for item in order.items %}
+                            <div class="order-item-card">
+                                <div>
+                                    <strong>Book #{{ item.book_id }}</strong>
+                                    {% if item.title_snapshot %}
+                                    - {{ item.title_snapshot }}
+                                    {% endif %}
+                                    (Qty: {{ item.quantity }})
+                                </div>
+                                {% if item.already_reviewed %}
+                                <span class="role-tag">Reviewed</span>
+                                {% elif item.can_review %}
+                                <form method="post" class="inline-review-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="order_id" value="{{ order.id }}" />
+                                    <input type="hidden" name="book_id" value="{{ item.book_id }}" />
+                                    <input type="hidden" name="q" value="{{ search_query }}" />
+                                    <input name="rating" type="number" min="1" max="5" step="1" value="5" required />
+                                    <input name="comment" type="text" placeholder="Write review..." />
+                                    <button type="submit">Review</button>
+                                </form>
+                                {% else %}
+                                <span class="muted">Pending delivery</span>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>{{ order.payment_id|default:'-' }}</td>
+                    <td>{{ order.shipment_id|default:'-' }}</td>
+                    <td>{{ order.shipment_status|default:'UNKNOWN' }}</td>
+                    <td>{{ order.created_at }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">No orders found for this customer.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

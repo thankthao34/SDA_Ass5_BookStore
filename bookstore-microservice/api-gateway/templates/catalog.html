@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="grid two-col">
+    <article class="panel panel-form">
+        <h2>Catalog Service</h2>
+        <p class="muted">Categories and tags classify books. Book Service uses category IDs; Review and Recommendation depend on this catalog quality.</p>
+
+        <form method="post" class="stacked-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_category" />
+            <input type="hidden" name="q" value="{{ search_query }}" />
+            <h3>Create Category</h3>
+            <label>Name
+                <input name="name" type="text" placeholder="Backend Engineering" required />
+            </label>
+            <label>Description
+                <input name="description" type="text" placeholder="Books for backend and distributed systems" />
+            </label>
+            <label>Parent ID (optional)
+                <input name="parent_id" type="number" min="1" step="1" placeholder="1" />
+            </label>
+            <button type="submit">Create Category</button>
+        </form>
+
+        <form method="post" class="stacked-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_tag" />
+            <input type="hidden" name="q" value="{{ search_query }}" />
+            <h3>Create Tag</h3>
+            <label>Tag Name
+                <input name="tag_name" type="text" placeholder="microservices" required />
+            </label>
+            <button type="submit">Create Tag</button>
+        </form>
+    </article>
+
+    <article class="panel panel-list">
+        <h2>Catalog Mapping</h2>
+        <form method="get" class="search-row">
+            <input name="q" type="text" value="{{ search_query }}" placeholder="Search by category/tag id, name, description..." />
+            <button type="submit">Search</button>
+            {% if search_query %}
+            <a class="table-link" href="{% url 'catalog' %}">Clear</a>
+            {% endif %}
+        </form>
+
+        <h3>Categories</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Parent</th>
+                        <th>Books Linked</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for category in categories %}
+                    <tr>
+                        <td>{{ category.id }}</td>
+                        <td>{{ category.name }}</td>
+                        <td>{{ category.description|default:'-' }}</td>
+                        <td>{{ category.parent_id|default:'-' }}</td>
+                        <td>{{ category.book_count }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5">No categories found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <h3 class="subheading">Tags</h3>
+        <div class="pill-row">
+            {% for tag in tags %}
+            <span>#{{ tag.name }} ({{ tag.id }})</span>
+            {% empty %}
+            <span>No tags found.</span>
+            {% endfor %}
+        </div>
+
+        <p class="muted">Related page: <a class="table-link" href="{% url 'books' %}">Book Service UI</a>.</p>
+    </article>
+</section>
+{% endblock %}

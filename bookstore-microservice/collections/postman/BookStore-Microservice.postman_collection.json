@@ -1,0 +1,281 @@
+{
+  "info": {
+    "_postman_id": "2a75d2da-e76f-4954-8772-88d7e0464e40",
+    "name": "BookStore Microservice - Assignment 05",
+    "description": "Demo-ready collection for customer-service, book-service, cart-service, and api-gateway.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Services API Demo Flow",
+      "description": "Run requests in order for class demo.",
+      "item": [
+        {
+          "name": "01 Create Customer (auto-create cart)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{customer_name}}\",\n  \"email\": \"demo+{{$timestamp}}@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{customer_service_url}}/customers/",
+              "host": [
+                "{{customer_service_url}}"
+              ],
+              "path": [
+                "customers",
+                ""
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('customer_id', data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 List Customers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{customer_service_url}}/customers/",
+              "host": [
+                "{{customer_service_url}}"
+              ],
+              "path": [
+                "customers",
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "03 Create Book",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"{{book_title}}\",\n  \"author\": \"{{book_author}}\",\n  \"price\": \"{{book_price}}\",\n  \"stock\": {{book_stock}}\n}"
+            },
+            "url": {
+              "raw": "{{book_service_url}}/books/",
+              "host": [
+                "{{book_service_url}}"
+              ],
+              "path": [
+                "books",
+                ""
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('book_id', data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 List Books",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{book_service_url}}/books/",
+              "host": [
+                "{{book_service_url}}"
+              ],
+              "path": [
+                "books",
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "05 Add Item To Cart",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": {{customer_id}},\n  \"book_id\": {{book_id}},\n  \"quantity\": {{quantity}}\n}"
+            },
+            "url": {
+              "raw": "{{cart_service_url}}/cart-items/",
+              "host": [
+                "{{cart_service_url}}"
+              ],
+              "path": [
+                "cart-items",
+                ""
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('cart_item_id', data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 View Cart By Customer",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{cart_service_url}}/carts/{{customer_id}}/",
+              "host": [
+                "{{cart_service_url}}"
+              ],
+              "path": [
+                "carts",
+                "{{customer_id}}",
+                ""
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Gateway Pages",
+      "item": [
+        {
+          "name": "01 Customers Page",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{gateway_url}}/customers/",
+              "host": [
+                "{{gateway_url}}"
+              ],
+              "path": [
+                "customers",
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "02 Books Page",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{gateway_url}}/books/",
+              "host": [
+                "{{gateway_url}}"
+              ],
+              "path": [
+                "books",
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "03 Cart Page",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{gateway_url}}/cart/{{customer_id}}/",
+              "host": [
+                "{{gateway_url}}"
+              ],
+              "path": [
+                "cart",
+                "{{customer_id}}",
+                ""
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "event": [],
+  "variable": [
+    {
+      "key": "customer_name",
+      "value": "Demo Student"
+    },
+    {
+      "key": "book_title",
+      "value": "Designing Data-Intensive Applications"
+    },
+    {
+      "key": "book_author",
+      "value": "Martin Kleppmann"
+    },
+    {
+      "key": "book_price",
+      "value": "39.99"
+    },
+    {
+      "key": "book_stock",
+      "value": "40"
+    },
+    {
+      "key": "quantity",
+      "value": "2"
+    },
+    {
+      "key": "customer_id",
+      "value": "1"
+    },
+    {
+      "key": "book_id",
+      "value": "1"
+    },
+    {
+      "key": "cart_item_id",
+      "value": "1"
+    }
+  ]
+}

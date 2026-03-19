@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="panel panel-list">
+    <h2>Pay Service Operations</h2>
+    <p class="muted">Payment records are created by Order Service. This screen maps payment status back to order/customer for full flow visibility.</p>
+
+    <form method="get" class="search-row">
+        <input name="q" type="text" value="{{ search_query }}" placeholder="Search by payment id, order id, method, status, customer..." />
+        <button type="submit">Search</button>
+        {% if search_query %}
+        <a class="table-link" href="{% url 'payments' %}">Clear</a>
+        {% endif %}
+    </form>
+
+    <p class="muted">Related pages: <a class="table-link" href="{% url 'manage-orders' %}">Order Ops</a> and <a class="table-link" href="{% url 'manage-shipments' %}">Shipment Ops</a>.</p>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Payment ID</th>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Method</th>
+                    <th>Status</th>
+                    <th>Amount</th>
+                    <th>Transaction Ref</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payment in payments %}
+                <tr>
+                    <td>{{ payment.id }}</td>
+                    <td>{{ payment.order_id }}</td>
+                    <td>{{ payment.order_customer_id|default:'-' }}</td>
+                    <td>{{ payment.method }}</td>
+                    <td>{{ payment.status }}</td>
+                    <td>{{ payment.amount }}</td>
+                    <td>{{ payment.transaction_ref|default:'-' }}</td>
+                    <td>
+                        <form method="post" class="inline-status-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="payment_id" value="{{ payment.id }}" />
+                            <input type="hidden" name="q" value="{{ search_query }}" />
+                            <input name="transaction_ref" type="text" placeholder="Optional ref" />
+                            <button type="submit" name="action" value="confirm">Confirm</button>
+                            <button type="submit" name="action" value="fail" class="danger-button">Fail</button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">No payment records found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,151 @@
+BOOKSTORE MICROSERVICE PROJECT PLAN (ASSIGNMENT 05)
+
+1.  PROJECT OVERVIEW System: BookStore Microservice Architecture using
+    Django REST Framework.
+
+Architecture: Client (Browser) | v API Gateway | ——————————— |
+customer-service | book-service | cart-service | ———————————
+
+Principles: - Microservice architecture - Database per service - REST
+communication - Docker Compose deployment
+
+2.  ROOT PROJECT STRUCTURE
+
+bookstore-microservice/ │ ├── customer-service/ ├── book-service/ ├──
+cart-service/ ├── api-gateway/ ├── docker-compose.yml └── README.md
+
+3.  SERVICE RESPONSIBILITIES
+
+3.1 CUSTOMER SERVICE Purpose: Manage customers and trigger cart
+creation.
+
+Endpoints: GET /customers/ POST /customers/
+
+Database Model: Customer - id - name - email
+
+Logic: When a customer is created, call cart-service to automatically
+create a cart.
+
+3.2 BOOK SERVICE Purpose: Manage bookstore catalog.
+
+Endpoints: GET /books/ POST /books/
+
+Database Model: Book - id - title - author - price - stock
+
+3.3 CART SERVICE Purpose: Handle shopping cart logic.
+
+Endpoints: POST /carts/ POST /cart-items/ GET /carts/{customer_id}/
+
+Database Models:
+
+Cart - id - customer_id
+
+CartItem - id - cart_id - book_id - quantity
+
+3.4 API GATEWAY Purpose: Single entry point and simple web interface.
+
+Responsibilities: - Call book-service - Call cart-service - Render HTML
+pages
+
+Views: book_list() view_cart()
+
+Templates: books.html cart.html
+
+4.  SERVICE INTERNAL STRUCTURE
+
+Each service is an independent Django project.
+
+service-name/ │ ├── manage.py ├── project/ │ ├── settings.py │ ├──
+urls.py │ └── asgi.py │ ├── app/ │ ├── models.py │ ├── serializers.py │
+├── views.py │ ├── urls.py │ └── admin.py │ ├── requirements.txt └──
+Dockerfile
+
+5.  INTER-SERVICE COMMUNICATION
+
+Technology: Python requests library
+
+Example Flow: Customer Creation
+
+Client -> POST /customers Customer Service: save customer call
+cart-service POST /carts Cart created automatically
+
+Example Flow: Add Item To Cart
+
+Client -> POST /cart-items Cart Service: call book-service GET /books
+validate book exists add item to cart
+
+6.  API DESIGN
+
+Customer API
+
+POST /customers/ { “name”: “John”, “email”: “john@email.com” }
+
+GET /customers/
+
+Book API
+
+POST /books/ { “title”: “Clean Code”, “author”: “Robert Martin”,
+“price”: 30, “stock”: 100 }
+
+GET /books/
+
+Cart API
+
+POST /carts/ { “customer_id”: 1 }
+
+POST /cart-items/ { “cart”: 1, “book_id”: 2, “quantity”: 3 }
+
+GET /carts/{customer_id}/
+
+7.  DOCKER DEPLOYMENT
+
+docker-compose.yml
+
+services:
+
+customer-service: build: ./customer-service ports: - “8001:8000”
+
+book-service: build: ./book-service ports: - “8002:8000”
+
+cart-service: build: ./cart-service ports: - “8003:8000”
+
+api-gateway: build: ./api-gateway ports: - “8000:8000”
+
+Run system:
+
+docker-compose up –build
+
+8.  DEVELOPMENT ORDER
+
+9.  Create root project folder
+
+10. Create customer-service
+
+11. Implement models, serializers, views
+
+12. Create book-service
+
+13. Create cart-service
+
+14. Implement REST communication between services
+
+15. Create API gateway
+
+16. Add HTML templates
+
+17. Create docker-compose
+
+18. Test full system
+
+19. TEST PLAN
+
+Test scenarios: - Create customer - Auto create cart - Add book - Add
+item to cart - View cart - View books
+
+10. DELIVERABLES
+
+-   GitHub repository
+-   Architecture diagram
+-   API documentation
+-   10 minute demo video
+-   8–12 page technical report

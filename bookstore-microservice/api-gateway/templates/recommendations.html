@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="panel panel-list">
+    <h2>Recommendations - Customer #{{ customer_id }}</h2>
+    <p class="muted">Rule-based suggestions from recommender-ai-service.</p>
+    <div class="book-grid">
+        {% for book in data.recommendations %}
+        <div class="book-card">
+            <h3>{{ book.title }}</h3>
+            <p>{{ book.author }}</p>
+            <div class="pill-row">
+                <span>ID: {{ book.id }}</span>
+                <span>Catalog: {{ book.catalog_id }}</span>
+                <span>Price: {{ book.price }}</span>
+                {% if book.score %}<span>Score: {{ book.score }}</span>{% endif %}
+                {% if book.avg_rating %}<span>Avg Rating: {{ book.avg_rating }}</span>{% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <div class="empty-state">No recommendations available.</div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}
